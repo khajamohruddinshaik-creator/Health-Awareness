@@ -1,0 +1,117 @@
+{
+  "entities": {
+    "AdminRole": {
+      "title": "AdminRole",
+      "description": "Administrator role record keyed by Firebase Auth UID.",
+      "type": "object",
+      "properties": {
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 150
+        },
+        "role": {
+          "type": "string",
+          "enum": ["admin"]
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "maxLength": 64
+        }
+      },
+      "required": ["role"]
+    },
+    "RegisteredUser": {
+      "title": "RegisteredUser",
+      "description": "Registered community member profile with PII managed by administrators and readable only by the owner or administrators.",
+      "type": "object",
+      "properties": {
+        "id": {
+          "type": "number"
+        },
+        "uid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 120
+        },
+        "email": {
+          "type": "string",
+          "format": "email",
+          "maxLength": 150
+        },
+        "phone": {
+          "type": "string",
+          "pattern": "^[0-9]{10}$",
+          "minLength": 10,
+          "maxLength": 10
+        },
+        "role": {
+          "type": "string",
+          "enum": ["user"]
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 64
+        },
+        "updatedAt": {
+          "type": "string",
+          "maxLength": 64
+        }
+      },
+      "required": ["id", "name", "email", "phone", "role", "createdAt"]
+    },
+    "PhoneLookup": {
+      "title": "PhoneLookup",
+      "description": "Server-encrypted phone hash lookup for resolving mobile logins without exposing plaintext PII.",
+      "type": "object",
+      "properties": {
+        "ownerUid": {
+          "type": "string",
+          "maxLength": 128,
+          "pattern": "^[a-zA-Z0-9_\\-]+$"
+        },
+        "cipherEmail": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 512
+        },
+        "createdAt": {
+          "type": "string",
+          "maxLength": 64
+        }
+      },
+      "required": ["ownerUid", "cipherEmail", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": {
+        "$ref": "#/entities/AdminRole"
+      },
+      "description": "Stores verified administrator UIDs for RBAC enforcement."
+    },
+    "/users/{userId}": {
+      "schema": {
+        "$ref": "#/entities/RegisteredUser"
+      },
+      "description": "Stores registered user directory records (name, email, mobile number) accessible to the account owner and verified administrators."
+    },
+    "/phoneLookups/{phoneHash}": {
+      "schema": {
+        "$ref": "#/entities/PhoneLookup"
+      },
+      "description": "Encrypted email reference keyed by SHA-256 hash of normalized phone number."
+    }
+  }
+}

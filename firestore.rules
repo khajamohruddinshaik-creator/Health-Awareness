@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    function isValidRegisteredUser(data) {
+      return data.keys().hasAll(['id', 'name', 'email', 'phone', 'role', 'createdAt']) &&
+        data.keys().hasOnly(['id', 'uid', 'name', 'email', 'phone', 'role', 'createdAt', 'updatedAt']) &&
+        data.id is number &&
+        (!('uid' in data) || isValidId(data.uid)) &&
+        data.name is string && data.name.size() >= 1 && data.name.size() <= 120 &&
+        data.email is string && data.email.size() >= 3 && data.email.size() <= 150 &&
+        data.phone is string && data.phone.size() == 10 && data.phone.matches('^[0-9]{10}$') &&
+        data.role is string && data.role == 'user' &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64 &&
+        (!('updatedAt' in data) || (data.updatedAt is string && data.updatedAt.size() >= 1 && data.updatedAt.size() <= 64));
+    }
+
+    function isValidPhoneLookup(data) {
+      return data.keys().hasAll(['ownerUid', 'cipherEmail', 'createdAt']) &&
+        data.keys().hasOnly(['ownerUid', 'cipherEmail', 'createdAt']) &&
+        isValidId(data.ownerUid) &&
+        data.cipherEmail is string && data.cipherEmail.size() >= 1 && data.cipherEmail.size() <= 512 &&
+        data.createdAt is string && data.createdAt.size() >= 1 && data.createdAt.size() <= 64;
+    }
+
+    // Administrator role directory:
+    // - Signed-in users may check only their own /admins/{uid} document.
+    // - All client-side writes (create, update, delete) and list queries are strictly forbidden
+    //   so normal users can never grant themselves or modify admin privileges.
+    match /admins/{adminUid} {
+      allow get: if isValidId(adminUid) && isSignedIn() && request.auth.uid == adminUid;
+      allow list: if false;
+      allow create, update, delete: if false;
+    }
+
+    // Registered users directory:
+    // - Account owners can read and create only their own profile (strictly role == 'user').
+    // - Listing, updating, and deleting registered accounts are restricted to verified administrators.
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isAdmin() || (isSignedIn() && request.auth.uid == userId));
+      allow list: if isAdmin();
+      allow create: if isValidId(userId) && isValidRegisteredUser(incoming()) && (
+        isAdmin() ||
+        (isSignedIn() &&
+          request.auth.uid == userId &&
+          'uid' in incoming() &&
+          incoming().uid == request.auth.uid &&
+          incoming().role == 'user' &&
+          incoming().email == request.auth.token.email)
+      );
+      allow update: if isValidId(userId) && isAdmin() && isValidRegisteredUser(incoming()) &&
+        incoming().id == existing().id &&
+        incoming().role == existing().role &&
+        incoming().createdAt == existing().createdAt &&
+        (!('uid' in existing()) || ('uid' in incoming() && incoming().uid == existing().uid)) &&
+        incoming().diff(existing()).affectedKeys().hasOnly(['name', 'email', 'phone', 'updatedAt']);
+      allow delete: if isValidId(userId) && isAdmin();
+    }
+
+    // Encrypted phone-to-email lookup (server-encrypted AES-256-GCM ciphertext, non-enumerable)
+    match /phoneLookups/{phoneHash} {
+      allow get: if isValidId(phoneHash);
+      allow list: if false;
+      allow create: if isValidId(phoneHash) && isSignedIn() && isValidPhoneLookup(incoming()) &&
+        incoming().ownerUid == request.auth.uid;
+      allow update: if false;
+      allow delete: if isValidId(phoneHash) && isAdmin();
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Health & Hygiene Awareness",
+  "description": "Interactive Health and Hygiene Awareness portal featuring daily habit tracking, nutrition guidance, handwashing walkthroughs, knowledge quizzes, and user administration.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
